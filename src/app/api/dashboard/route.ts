@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runDashboardScan } from "@/lib/scanner/dashboard";
+import { getLatestScan } from "@/lib/db/dashboard-cache";
 
 export const maxDuration = 60;
 
@@ -8,18 +8,23 @@ export async function GET(request: NextRequest) {
   const universe = searchParams.get("universe") ?? "sp500";
 
   try {
-    const { stocks, totalScanned } = await runDashboardScan(universe);
+    const cached = await getLatestScan(universe);
 
-    return NextResponse.json({
-      scan_date: new Date().toISOString().slice(0, 10),
-      universe,
-      total_scanned: totalScanned,
-      stocks,
-    });
+    if (!cached || cached.stocks.length === 0) {
+      return NextResponse.json({
+        scan_date: new Date().toISOString().slice(0, 10),
+        universe,
+        total_scanned: 0,
+        stocks: [],
+        message: "No cached data available. Run the cache writer to populate.",
+      });
+    }
+
+    return NextResponse.json(cached);
   } catch (err) {
-    console.error("Dashboard scan failed:", err);
+    console.error("Dashboard cache read failed:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Dashboard scan failed" },
+      { error: err instanceof Error ? err.message : "Dashboard read failed" },
       { status: 500 }
     );
   }

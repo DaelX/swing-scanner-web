@@ -3,8 +3,10 @@
  * Handles fetching candles for individual tickers and batches.
  */
 
-import yahooFinance from "yahoo-finance2";
+import YahooFinance from "yahoo-finance2";
 import type { CandleData } from "./indicators";
+
+const yahooFinance = new YahooFinance();
 
 // In-memory cache with TTL
 const cache = new Map<string, { data: CandleData[]; expiry: number }>();
