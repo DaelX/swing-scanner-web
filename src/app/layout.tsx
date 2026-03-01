@@ -35,6 +35,9 @@ export default function RootLayout({
           </div>
           <div className="flex gap-4 text-sm text-slate-400">
             <a href="/" className="hover:text-white transition">
+              Scanner
+            </a>
+            <a href="/dashboard" className="hover:text-white transition">
               Dashboard
             </a>
           </div>

@@ -144,6 +144,18 @@ export function rollingHigh(data: number[], period: number): (number | null)[] {
   return result;
 }
 
+export function rollingLow(data: number[], period: number): (number | null)[] {
+  const result: (number | null)[] = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      result.push(null);
+    } else {
+      result.push(Math.min(...data.slice(i - period + 1, i + 1)));
+    }
+  }
+  return result;
+}
+
 export function volumeRatio(volumes: number[], period: number = 20): (number | null)[] {
   const avgVol = sma(volumes, period);
   return volumes.map((v, i) => {
@@ -183,12 +195,16 @@ export interface IndicatorRow {
   volume: number;
   sma20: number | null;
   sma50: number | null;
+  sma200: number | null;
   sma20_slope: number | null;
   rsi: number | null;
+  macd_line: number | null;
+  macd_signal: number | null;
   macd_hist: number | null;
   macd_hist_prev: number | null;
   atr: number | null;
   high_20d: number | null;
+  low_20d: number | null;
   vol_ratio: number | null;
   rs_20d: number | null;
   rs_60d: number | null;
@@ -214,11 +230,13 @@ export function computeAllIndicators(
 
   const sma20 = sma(closes, 20);
   const sma50 = sma(closes, 50);
+  const sma200 = sma(closes, 200);
   const slope = smaSlope(closes, 20, 5);
   const rsiValues = rsi(closes, 14);
-  const { histogram } = macd(closes, 12, 26, 9);
+  const { macdLine, signalLine, histogram } = macd(closes, 12, 26, 9);
   const atrValues = atr(highs, lows, closes, 14);
   const high20d = rollingHigh(highs, 20);
+  const low20d = rollingLow(lows, 20);
   const volRat = volumeRatio(volumes, 20);
 
   let rs20: (number | null)[] = new Array(candles.length).fill(null);
@@ -232,12 +250,16 @@ export function computeAllIndicators(
     ...c,
     sma20: sma20[i],
     sma50: sma50[i],
+    sma200: sma200[i],
     sma20_slope: slope[i],
     rsi: rsiValues[i],
+    macd_line: macdLine[i],
+    macd_signal: signalLine[i],
     macd_hist: histogram[i],
     macd_hist_prev: i > 0 ? histogram[i - 1] : null,
     atr: atrValues[i],
     high_20d: high20d[i],
+    low_20d: low20d[i],
     vol_ratio: volRat[i],
     rs_20d: rs20[i],
     rs_60d: rs60[i],
