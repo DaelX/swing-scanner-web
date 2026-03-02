@@ -100,10 +100,18 @@ export async function batchGetCandles(
   return results;
 }
 
+const DAELX_WATCHLIST = [
+  "AMD", "GOOG", "PLTR", "TSLA", "TSLL", "NVDA", "NVDL", "TQQQ",
+  "GOOGL", "META", "MSFT", "AMZN", "AMZU", "NFLX", "AAPL", "ORCL",
+  "WMT", "SMR", "QQQ", "SPY", "VOO", "GLD",
+];
+
 export function getUniverse(name: string = "sp500"): string[] {
   switch (name.toLowerCase()) {
     case "nasdaq100":
       return NASDAQ100_FALLBACK;
+    case "watchlist":
+      return DAELX_WATCHLIST;
     case "sp500":
     default:
       return SP500_FALLBACK;

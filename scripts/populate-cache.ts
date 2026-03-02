@@ -77,7 +77,7 @@ async function writeDashboardBatch(universe: string, scanDate: string, stocks: a
 // ─── Main ───
 
 async function main() {
-  const universes = process.argv[2] ? [process.argv[2]] : ["sp500", "nasdaq100"];
+  const universes = process.argv[2] ? [process.argv[2]] : ["sp500", "nasdaq100", "watchlist"];
   const scanDate = new Date().toISOString().slice(0, 10);
 
   console.log(`\n🔄 Cache Writer — ${scanDate}`);
