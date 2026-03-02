@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import type { DashboardStock, DashboardResponse, Signal } from "@/lib/dashboard-types";
+import type { DashboardStock, DashboardResponse, Signal, StockKPIs } from "@/lib/dashboard-types";
 
 /* ── Mini calendar types ── */
 interface MiniMacroEvent { date: string; time: string; type: string; name: string; impact: string; }
@@ -118,6 +118,7 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState("all");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [calendarData, setCalendarData] = useState<MiniCalendarData | null>(null);
+  const [kpiCache, setKpiCache] = useState<Record<string, StockKPIs | "loading" | "error">>({});
 
   useEffect(() => {
     fetch("/api/calendar?days=14&earnings=true")
@@ -125,6 +126,15 @@ export default function DashboardPage() {
       .then((d) => setCalendarData(d))
       .catch(() => {});
   }, []);
+
+  const fetchKPI = (symbol: string) => {
+    if (kpiCache[symbol]) return;
+    setKpiCache((prev) => ({ ...prev, [symbol]: "loading" }));
+    fetch(`/api/kpi/${symbol}`)
+      .then((r) => r.json())
+      .then((d) => setKpiCache((prev) => ({ ...prev, [symbol]: d })))
+      .catch(() => setKpiCache((prev) => ({ ...prev, [symbol]: "error" })));
+  };
 
   const runScan = async () => {
     setLoading(true);
@@ -303,7 +313,7 @@ export default function DashboardPage() {
                     className={`border-b border-slate-800 hover:bg-slate-800/50 cursor-pointer transition ${
                       s.signal === "STRONG_BUY" ? "bg-green-950/20" : s.signal === "STRONG_SELL" ? "bg-red-950/20" : ""
                     }`}
-                    onClick={() => setExpandedRow(expandedRow === s.symbol ? null : s.symbol)}
+                    onClick={() => { const next = expandedRow === s.symbol ? null : s.symbol; setExpandedRow(next); if (next) fetchKPI(next); }}
                   >
                     <td className="px-2 py-2">
                       <div className="flex flex-col gap-1">
@@ -337,6 +347,72 @@ export default function DashboardPage() {
                   {expandedRow === s.symbol && (
                     <tr key={`${s.symbol}-detail`} className="bg-slate-900/60">
                       <td colSpan={11} className="px-4 py-3">
+                        {/* ── KPI Row ── */}
+                        {(() => {
+                          const kpi = kpiCache[s.symbol];
+                          if (!kpi || kpi === "loading") return (
+                            <div className="text-xs text-slate-500 mb-3 flex items-center gap-2">
+                              <div className="animate-spin w-3 h-3 border border-blue-500 border-t-transparent rounded-full" />
+                              Loading fundamentals...
+                            </div>
+                          );
+                          if (kpi === "error") return <div className="text-xs text-red-400 mb-3">Failed to load KPIs</div>;
+                          const fmt = (v: number | null, suffix = "") => v !== null ? `${v.toLocaleString()}${suffix}` : "—";
+                          const fmtB = (v: number | null) => {
+                            if (v === null) return "—";
+                            if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+                            if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+                            if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+                            return `$${v.toLocaleString()}`;
+                          };
+                          const recColor = (r: string | null) => {
+                            if (!r) return "text-slate-400";
+                            if (r === "strong_buy" || r === "buy") return "text-green-400";
+                            if (r === "hold") return "text-yellow-400";
+                            return "text-red-400";
+                          };
+                          const marginColor = (v: number | null) => {
+                            if (v === null) return "text-slate-400";
+                            return v >= 20 ? "text-green-400" : v >= 10 ? "text-yellow-400" : v >= 0 ? "text-orange-400" : "text-red-400";
+                          };
+                          return (
+                            <div className="mb-3 border border-blue-900/40 bg-blue-950/20 rounded-lg p-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-bold text-blue-400">{kpi.company_name}</span>
+                                <span className={`text-[10px] font-bold uppercase ${recColor(kpi.analyst_recommendation)}`}>
+                                  {kpi.analyst_recommendation || "—"}
+                                </span>
+                                {kpi.analyst_target && (
+                                  <span className="text-[10px] text-slate-400">
+                                    Target: <span className="text-white font-mono">${kpi.analyst_target.toFixed(2)}</span>
+                                    <span className={`ml-1 ${kpi.analyst_target > s.price ? "text-green-400" : "text-red-400"}`}>
+                                      ({((kpi.analyst_target / s.price - 1) * 100).toFixed(1)}%)
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 gap-x-4 gap-y-2 text-[11px]">
+                                <KpiCell label="Mkt Cap" value={fmtB(kpi.market_cap)} />
+                                <KpiCell label="P/E (TTM)" value={fmt(kpi.pe_trailing ? +kpi.pe_trailing.toFixed(1) : null)} color={kpi.pe_trailing !== null ? (kpi.pe_trailing < 25 ? "text-green-400" : kpi.pe_trailing < 40 ? "text-yellow-400" : "text-red-400") : undefined} />
+                                <KpiCell label="P/E (Fwd)" value={fmt(kpi.pe_forward ? +kpi.pe_forward.toFixed(1) : null)} />
+                                <KpiCell label="EPS TTM" value={kpi.eps_ttm !== null ? `$${kpi.eps_ttm.toFixed(2)}` : "—"} />
+                                <KpiCell label="Rev Growth" value={fmt(kpi.revenue_growth, "%")} color={kpi.revenue_growth !== null ? (kpi.revenue_growth > 15 ? "text-green-400" : kpi.revenue_growth > 0 ? "text-yellow-400" : "text-red-400") : undefined} />
+                                <KpiCell label="Profit Mrg" value={fmt(kpi.profit_margin, "%")} color={marginColor(kpi.profit_margin)} />
+                                <KpiCell label="ROE" value={fmt(kpi.roe, "%")} color={kpi.roe !== null ? (kpi.roe > 20 ? "text-green-400" : kpi.roe > 10 ? "text-yellow-400" : "text-orange-400") : undefined} />
+                                <KpiCell label="D/E" value={fmt(kpi.debt_to_equity ? +kpi.debt_to_equity.toFixed(0) : null)} color={kpi.debt_to_equity !== null ? (kpi.debt_to_equity < 50 ? "text-green-400" : kpi.debt_to_equity < 150 ? "text-yellow-400" : "text-red-400") : undefined} />
+                                <KpiCell label="Revenue" value={fmtB(kpi.revenue)} />
+                                <KpiCell label="Free CF" value={fmtB(kpi.free_cash_flow)} color={kpi.free_cash_flow !== null ? (kpi.free_cash_flow > 0 ? "text-green-400" : "text-red-400") : undefined} />
+                                <KpiCell label="Div Yield" value={fmt(kpi.dividend_yield, "%")} />
+                                <KpiCell label="Beta" value={fmt(kpi.beta ? +kpi.beta.toFixed(2) : null)} />
+                                <KpiCell label="P/B" value={fmt(kpi.price_to_book ? +kpi.price_to_book.toFixed(1) : null)} />
+                                <KpiCell label="Short %" value={fmt(kpi.short_pct_float, "%")} color={kpi.short_pct_float !== null ? (kpi.short_pct_float > 10 ? "text-red-400" : kpi.short_pct_float > 5 ? "text-yellow-400" : "text-slate-300") : undefined} />
+                                <KpiCell label="52w High" value={kpi.week52_high !== null ? `$${kpi.week52_high.toFixed(2)}` : "—"} />
+                                <KpiCell label="52w Low" value={kpi.week52_low !== null ? `$${kpi.week52_low.toFixed(2)}` : "—"} />
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                           <div>
                             <div className="text-slate-500 mb-1">Factor Breakdown</div>
@@ -407,6 +483,16 @@ export default function DashboardPage() {
       <div className="mt-6 bg-slate-800/30 border border-slate-700 rounded-lg p-3 text-xs text-slate-500">
         <strong>DISCLAIMER:</strong> This is a research/educational tool only. NOT financial advice. Always do your own due diligence.
       </div>
+    </div>
+  );
+}
+
+/* ── KPI Cell ── */
+function KpiCell({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div>
+      <div className="text-[9px] text-slate-500 uppercase tracking-wider">{label}</div>
+      <div className={`font-mono font-semibold ${color || "text-white"}`}>{value}</div>
     </div>
   );
 }

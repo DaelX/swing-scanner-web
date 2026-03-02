@@ -85,3 +85,31 @@ export interface DashboardResponse {
   total_scanned: number;
   stocks: DashboardStock[];
 }
+
+/** Fundamental KPIs for a single stock */
+export interface StockKPIs {
+  symbol: string;
+  company_name: string;
+  market_cap: number | null;
+  pe_trailing: number | null;
+  pe_forward: number | null;
+  eps_ttm: number | null;
+  eps_forward: number | null;
+  revenue: number | null;
+  revenue_growth: number | null;
+  gross_margin: number | null;
+  operating_margin: number | null;
+  profit_margin: number | null;
+  roe: number | null;
+  roa: number | null;
+  debt_to_equity: number | null;
+  free_cash_flow: number | null;
+  dividend_yield: number | null;
+  beta: number | null;
+  price_to_book: number | null;
+  short_pct_float: number | null;
+  analyst_target: number | null;
+  analyst_recommendation: string | null;
+  week52_high: number | null;
+  week52_low: number | null;
+}
