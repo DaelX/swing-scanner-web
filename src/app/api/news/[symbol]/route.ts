@@ -27,7 +27,9 @@ export async function GET(
         title: n.title,
         publisher: n.publisher || "Unknown",
         date: n.providerPublishTime
-          ? new Date(n.providerPublishTime * 1000).toISOString().split("T")[0]
+          ? (n.providerPublishTime instanceof Date
+              ? n.providerPublishTime.toISOString().split("T")[0]
+              : new Date(n.providerPublishTime * 1000).toISOString().split("T")[0])
           : "",
         link: n.link,
       }));
