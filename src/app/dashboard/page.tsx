@@ -124,6 +124,31 @@ export default function DashboardPage() {
   const [kpiCache, setKpiCache] = useState<Record<string, StockKPIs | "loading" | "error">>({});
   const [newsCache, setNewsCache] = useState<Record<string, NewsItem[] | "loading" | "error">>({});
   const [capitalMap, setCapitalMap] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResult, setSearchResult] = useState<DashboardStock | null>(null);
+  const [searchError, setSearchError] = useState("");
+
+  const lookupStock = async () => {
+    const sym = searchQuery.trim().toUpperCase();
+    if (!sym) return;
+    setSearchLoading(true);
+    setSearchError("");
+    setSearchResult(null);
+    try {
+      const res = await fetch(`/api/lookup/${sym}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(data.error || `Failed to look up ${sym}`);
+      }
+      const data = await res.json();
+      setSearchResult(data.stock);
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : "Lookup failed");
+    } finally {
+      setSearchLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/calendar?days=14&earnings=true")
@@ -154,7 +179,7 @@ export default function DashboardPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`/api/dashboard?universe=${universe}`);
+      const res = await fetch(`/api/dashboard?universe=${universe}&refresh=true`);
       if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
       const data: DashboardResponse = await res.json();
       setStocks(data.stocks);
@@ -241,6 +266,101 @@ export default function DashboardPage() {
             {loading ? "Scanning..." : "Scan Market"}
           </button>
         </div>
+      </div>
+
+      {/* ── Stock Search ── */}
+      <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-3 mb-4">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Look Up Stock</span>
+          <div className="flex gap-2 flex-1 max-w-md">
+            <input
+              type="text"
+              placeholder="Enter ticker (e.g. AAPL, TSLA, MSFT)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === "Enter") lookupStock(); }}
+              className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none font-mono"
+            />
+            <button
+              onClick={lookupStock}
+              disabled={searchLoading || !searchQuery.trim()}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 px-4 py-2 rounded text-sm font-medium transition whitespace-nowrap"
+            >
+              {searchLoading ? "Analyzing..." : "Analyze"}
+            </button>
+          </div>
+          {searchResult && (
+            <button
+              onClick={() => { setSearchResult(null); setSearchQuery(""); setSearchError(""); }}
+              className="text-slate-500 hover:text-slate-300 text-xs"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        {searchError && <div className="mt-2 text-sm text-red-400">{searchError}</div>}
+        {searchLoading && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+            <div className="animate-spin w-3 h-3 border border-blue-500 border-t-transparent rounded-full" />
+            Running full analysis on {searchQuery}...
+          </div>
+        )}
+        {searchResult && (
+          <div className="mt-3 border border-slate-700 rounded-lg overflow-hidden">
+            <div className="bg-slate-800/60 px-4 py-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-lg font-bold text-white">{searchResult.symbol}</span>
+                <span className="text-lg font-mono text-white">${searchResult.price.toFixed(2)}</span>
+                <ChangeCell value={searchResult.change_1d} />
+                <SignalBadge signal={searchResult.signal} />
+                <ScoreBar score={searchResult.signal_score} />
+                <TrendBadge trend={searchResult.trend} />
+              </div>
+            </div>
+            <div className="px-4 py-3 bg-slate-900/40">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <div className="text-slate-500 mb-1">Factor Breakdown</div>
+                  <div className="space-y-1.5">
+                    <FactorBar label="Trend" value={searchResult.factor_trend} />
+                    <FactorBar label="Momen" value={searchResult.factor_momentum} />
+                    <FactorBar label="MeanR" value={searchResult.factor_mean_reversion} />
+                    <FactorBar label="Volume" value={searchResult.factor_volume} />
+                    <FactorBar label="RS" value={searchResult.factor_relative_strength} />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500 mb-1">Key Levels</div>
+                  <div className="space-y-1">
+                    <div>SMA20: <span className="text-white font-mono">{searchResult.sma20 ? `$${searchResult.sma20.toFixed(2)}` : "—"}</span></div>
+                    <div>SMA50: <span className="text-white font-mono">{searchResult.sma50 ? `$${searchResult.sma50.toFixed(2)}` : "—"}</span></div>
+                    <div>SMA200: <span className="text-white font-mono">{searchResult.sma200 ? `$${searchResult.sma200.toFixed(2)}` : "—"}</span></div>
+                    <div>RSI: <span className="text-white font-mono">{searchResult.rsi ? searchResult.rsi.toFixed(1) : "—"}</span></div>
+                    <div>Vol Ratio: <span className="text-white font-mono">{searchResult.vol_ratio ? searchResult.vol_ratio.toFixed(2) : "—"}</span></div>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500 mb-1">Risk Management</div>
+                  <div className="space-y-1">
+                    <div>Stop: <span className="text-red-400 font-mono">{searchResult.stop_loss ? `$${searchResult.stop_loss.toFixed(2)} (${searchResult.stop_pct?.toFixed(1)}%)` : "—"}</span></div>
+                    <div>Target 1: <span className="text-green-400 font-mono">{searchResult.target_1 ? `$${searchResult.target_1.toFixed(2)}` : "—"}</span></div>
+                    <div>Target 2: <span className="text-green-400 font-mono">{searchResult.target_2 ? `$${searchResult.target_2.toFixed(2)}` : "—"}</span></div>
+                    <div>R:R: <span className={`font-mono font-bold ${(searchResult.reward_risk ?? 0) >= 2 ? "text-green-400" : "text-yellow-400"}`}>{searchResult.reward_risk?.toFixed(1) ?? "—"}</span></div>
+                    <div>Size: <span className="text-white font-mono">{searchResult.position_size_pct ? `${searchResult.position_size_pct.toFixed(1)}%` : "—"}</span></div>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500 mb-1">Signal Reasons</div>
+                  <div className="space-y-1">
+                    {searchResult.signal_reasons.length > 0 ? searchResult.signal_reasons.map((r, i) => (
+                      <div key={i} className={searchResult.signal_score > 0 ? "text-green-400" : searchResult.signal_score < 0 ? "text-red-400" : "text-slate-400"}>• {r}</div>
+                    )) : <div className="text-slate-600">No signals</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Portfolio Simulation Summary ── */}
