@@ -274,7 +274,7 @@ export async function runDashboardScan(
         else if (row.macd_hist < 0 && row.macd_hist_prev >= 0) macdCross = "bearish";
       }
 
-      const base: Omit<DashboardStock, "buy_zone_score" | "buy_zone_label" | "buy_zone_reasons" | "nearest_support" | "nearest_support_label" | "dist_to_buy"> = {
+      const base: Omit<DashboardStock, "buy_zone_score" | "buy_zone_label" | "buy_zone_reasons" | "nearest_support" | "nearest_support_label" | "dist_to_buy" | "est_entry_date" | "est_exit_date" | "est_entry_price" | "est_target_price" | "est_hold_days" | "est_reward_risk"> = {
         symbol,
         price: Math.round(row.close * 100) / 100,
         change_1d: Math.round(change1d * 100) / 100,
