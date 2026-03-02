@@ -245,6 +245,9 @@ export default function DashboardPage() {
                 <SortHeader k="vol_ratio">Vol</SortHeader>
                 <th className="px-2 py-2 text-left text-[10px] uppercase tracking-wider text-slate-400">MACD</th>
                 <SortHeader k="dist_support">→ Support</SortHeader>
+                <SortHeader k="est_entry_date">Entry</SortHeader>
+                <SortHeader k="est_exit_date">Exit</SortHeader>
+                <SortHeader k="est_reward_risk">R:R</SortHeader>
               </tr>
             </thead>
             <tbody>
@@ -280,11 +283,32 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-2 py-2"><MacdBadge cross={s.macd_signal_cross} /></td>
                     <td className="px-2 py-2"><DistCell value={s.dist_support} /></td>
+                    <td className="px-2 py-2">
+                      {s.est_entry_date ? (
+                        <span className="font-mono text-xs text-slate-300" title={s.est_entry_price ? `~$${s.est_entry_price.toFixed(2)}` : ""}>
+                          {s.est_entry_date.slice(5)}
+                        </span>
+                      ) : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-2 py-2">
+                      {s.est_exit_date ? (
+                        <span className="font-mono text-xs text-slate-300" title={s.est_target_price ? `~$${s.est_target_price.toFixed(2)}` : ""}>
+                          {s.est_exit_date.slice(5)}
+                        </span>
+                      ) : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-2 py-2">
+                      {s.est_reward_risk !== null ? (
+                        <span className={`font-mono text-xs font-bold ${s.est_reward_risk >= 2 ? "text-green-400" : s.est_reward_risk >= 1.5 ? "text-yellow-400" : "text-slate-400"}`}>
+                          {s.est_reward_risk.toFixed(1)}
+                        </span>
+                      ) : <span className="text-slate-600">—</span>}
+                    </td>
                   </tr>
                   {expandedRow === s.symbol && (
                     <tr key={`${s.symbol}-detail`} className="bg-slate-900/60">
-                      <td colSpan={12} className="px-4 py-3">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                      <td colSpan={15} className="px-4 py-3">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                           <div>
                             <div className="text-slate-500 mb-1">Key Levels</div>
                             <div className="space-y-1">
@@ -324,6 +348,17 @@ export default function DashboardPage() {
                               )}
                             </div>
                           </div>
+                          {s.est_entry_date && (
+                            <div>
+                              <div className="text-slate-500 mb-1">Trade Estimate</div>
+                              <div className="space-y-1">
+                                <div>Entry: <span className="text-white font-mono">{s.est_entry_date}</span>{s.est_entry_price ? <span className="text-slate-400"> @ ${s.est_entry_price.toFixed(2)}</span> : ""}</div>
+                                <div>Target: <span className="text-white font-mono">{s.est_exit_date}</span>{s.est_target_price ? <span className="text-slate-400"> @ ${s.est_target_price.toFixed(2)}</span> : ""}</div>
+                                <div>Hold: <span className="text-white font-mono">{s.est_hold_days ?? "—"} days</span></div>
+                                <div>R:R: <span className={`font-mono font-bold ${(s.est_reward_risk ?? 0) >= 2 ? "text-green-400" : (s.est_reward_risk ?? 0) >= 1.5 ? "text-yellow-400" : "text-slate-400"}`}>{s.est_reward_risk?.toFixed(1) ?? "—"}</span></div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>

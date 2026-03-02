@@ -53,6 +53,12 @@ export async function getLatestScan(
     nearest_support: row.nearest_support as number | null,
     nearest_support_label: row.nearest_support_label as string,
     dist_to_buy: row.dist_to_buy as number | null,
+    est_entry_date: row.est_entry_date as string | null,
+    est_exit_date: row.est_exit_date as string | null,
+    est_entry_price: row.est_entry_price as number | null,
+    est_target_price: row.est_target_price as number | null,
+    est_hold_days: row.est_hold_days as number | null,
+    est_reward_risk: row.est_reward_risk as number | null,
   }));
 
   return {
@@ -89,8 +95,9 @@ export async function writeScanCache(
         rsi, macd_hist, macd_signal_cross, vol_ratio, atr, atr_pct,
         rs_20d, rs_60d,
         buy_zone_score, buy_zone_label, buy_zone_reasons,
-        nearest_support, nearest_support_label, dist_to_buy
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        nearest_support, nearest_support_label, dist_to_buy,
+        est_entry_date, est_exit_date, est_entry_price, est_target_price, est_hold_days, est_reward_risk
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         s.symbol, universe, scanDate, s.price, s.change_1d, s.change_5d,
         s.sma20, s.sma50, s.sma200, s.support_20d, s.resistance_20d,
@@ -99,6 +106,7 @@ export async function writeScanCache(
         s.rs_20d, s.rs_60d,
         s.buy_zone_score, s.buy_zone_label, JSON.stringify(s.buy_zone_reasons),
         s.nearest_support, s.nearest_support_label, s.dist_to_buy,
+        s.est_entry_date, s.est_exit_date, s.est_entry_price, s.est_target_price, s.est_hold_days, s.est_reward_risk,
       ],
     }));
 

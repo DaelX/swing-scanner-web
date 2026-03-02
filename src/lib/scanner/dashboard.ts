@@ -8,13 +8,26 @@ import { batchGetCandles, getUniverse } from "./data";
 import { computeAllIndicators, type CandleData } from "./indicators";
 import type { DashboardStock } from "../dashboard-types";
 
-function computeBuyZone(stock: Omit<DashboardStock, "buy_zone_score" | "buy_zone_label" | "buy_zone_reasons" | "nearest_support" | "nearest_support_label" | "dist_to_buy">): {
+type BuyZoneInput = Omit<DashboardStock,
+  "buy_zone_score" | "buy_zone_label" | "buy_zone_reasons" |
+  "nearest_support" | "nearest_support_label" | "dist_to_buy" |
+  "est_entry_date" | "est_exit_date" | "est_entry_price" |
+  "est_target_price" | "est_hold_days" | "est_reward_risk"
+>;
+
+function computeBuyZone(stock: BuyZoneInput): {
   buy_zone_score: number;
   buy_zone_label: "IN_ZONE" | "APPROACHING" | "WATCH" | "NOT_READY";
   buy_zone_reasons: string[];
   nearest_support: number | null;
   nearest_support_label: string;
   dist_to_buy: number | null;
+  est_entry_date: string | null;
+  est_exit_date: string | null;
+  est_entry_price: number | null;
+  est_target_price: number | null;
+  est_hold_days: number | null;
+  est_reward_risk: number | null;
 } {
   let score = 0;
   const reasons: string[] = [];
@@ -111,6 +124,90 @@ function computeBuyZone(stock: Omit<DashboardStock, "buy_zone_score" | "buy_zone
   else if (score >= 20) label = "WATCH";
   else label = "NOT_READY";
 
+  // ─── Estimate Entry & Exit Dates ───
+  const today = new Date();
+  let est_entry_date: string | null = null;
+  let est_exit_date: string | null = null;
+  let est_entry_price: number | null = null;
+  let est_target_price: number | null = null;
+  let est_hold_days: number | null = null;
+  let est_reward_risk: number | null = null;
+
+  if (label === "IN_ZONE") {
+    // Already in buy zone → entry is now
+    est_entry_date = today.toISOString().slice(0, 10);
+    est_entry_price = Math.round(stock.price * 100) / 100;
+
+    // Target: resistance (20d high) or nearest SMA above, whichever is farther
+    const targets: number[] = [];
+    if (stock.resistance_20d && stock.resistance_20d > stock.price) targets.push(stock.resistance_20d);
+    if (stock.sma20 && stock.sma20 > stock.price) targets.push(stock.sma20);
+    if (stock.sma50 && stock.sma50 > stock.price) targets.push(stock.sma50);
+    // If price is above all SMAs, target = price + 2*ATR
+    if (targets.length === 0 && stock.atr) targets.push(stock.price + stock.atr * 2);
+
+    est_target_price = targets.length > 0 ? Math.round(Math.max(...targets) * 100) / 100 : null;
+
+    // Estimate hold days based on ATR-based velocity
+    if (est_target_price && stock.atr && stock.atr > 0) {
+      const priceDist = est_target_price - stock.price;
+      // Assume stock moves ~0.5 ATR/day on average during a swing move
+      est_hold_days = Math.max(3, Math.min(30, Math.round(priceDist / (stock.atr * 0.5))));
+    } else {
+      est_hold_days = 10; // default swing hold
+    }
+
+    const exitDate = new Date(today);
+    exitDate.setDate(exitDate.getDate() + (est_hold_days ?? 10));
+    // Skip weekends
+    while (exitDate.getDay() === 0 || exitDate.getDay() === 6) exitDate.setDate(exitDate.getDate() + 1);
+    est_exit_date = exitDate.toISOString().slice(0, 10);
+
+    // R:R ratio
+    const stopLevel = nearest?.level ?? (stock.atr ? stock.price - stock.atr * 1.5 : stock.price * 0.97);
+    const risk = stock.price - stopLevel;
+    const reward = (est_target_price ?? stock.price) - stock.price;
+    est_reward_risk = risk > 0 ? Math.round((reward / risk) * 100) / 100 : null;
+
+  } else if (label === "APPROACHING") {
+    // Estimate days to reach the buy zone based on recent drift rate
+    const dailyDrift = stock.change_1d; // % per day
+    const distToBuyPct = dist_to_buy ?? 3; // how far above support
+
+    if (dailyDrift < 0 && distToBuyPct > 0) {
+      // Stock is drifting down, estimate days until it reaches support
+      const daysToEntry = Math.max(1, Math.min(15, Math.round(distToBuyPct / Math.abs(dailyDrift))));
+      const entryDate = new Date(today);
+      entryDate.setDate(entryDate.getDate() + daysToEntry);
+      while (entryDate.getDay() === 0 || entryDate.getDay() === 6) entryDate.setDate(entryDate.getDate() + 1);
+      est_entry_date = entryDate.toISOString().slice(0, 10);
+      est_entry_price = nearest ? Math.round(nearest.level * 100) / 100 : null;
+    } else {
+      // Consolidating, expect entry in 3-7 days
+      const entryDate = new Date(today);
+      entryDate.setDate(entryDate.getDate() + 5);
+      while (entryDate.getDay() === 0 || entryDate.getDay() === 6) entryDate.setDate(entryDate.getDate() + 1);
+      est_entry_date = entryDate.toISOString().slice(0, 10);
+      est_entry_price = nearest ? Math.round(nearest.level * 100) / 100 : Math.round(stock.price * 0.98 * 100) / 100;
+    }
+
+    est_hold_days = 10;
+    est_target_price = stock.resistance_20d ? Math.round(stock.resistance_20d * 100) / 100 : Math.round(stock.price * 1.05 * 100) / 100;
+
+    const exitDate = new Date(est_entry_date);
+    exitDate.setDate(exitDate.getDate() + est_hold_days);
+    while (exitDate.getDay() === 0 || exitDate.getDay() === 6) exitDate.setDate(exitDate.getDate() + 1);
+    est_exit_date = exitDate.toISOString().slice(0, 10);
+
+    if (est_entry_price && est_target_price) {
+      const stopLevel = nearest?.level ? nearest.level * 0.98 : est_entry_price * 0.97;
+      const risk = est_entry_price - stopLevel;
+      const reward = est_target_price - est_entry_price;
+      est_reward_risk = risk > 0 ? Math.round((reward / risk) * 100) / 100 : null;
+    }
+  }
+  // WATCH and NOT_READY: no estimates (too far out)
+
   return {
     buy_zone_score: score,
     buy_zone_label: label,
@@ -118,6 +215,12 @@ function computeBuyZone(stock: Omit<DashboardStock, "buy_zone_score" | "buy_zone
     nearest_support: nearest?.level ?? null,
     nearest_support_label: nearest?.label ?? "",
     dist_to_buy,
+    est_entry_date,
+    est_exit_date,
+    est_entry_price,
+    est_target_price,
+    est_hold_days,
+    est_reward_risk,
   };
 }
 

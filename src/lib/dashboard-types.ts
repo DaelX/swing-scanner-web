@@ -40,6 +40,14 @@ export interface DashboardStock {
   nearest_support: number | null;  // closest key level below
   nearest_support_label: string;
   dist_to_buy: number | null;      // % to the buy zone
+
+  // Trade timing estimates
+  est_entry_date: string | null;   // estimated date to enter (YYYY-MM-DD)
+  est_exit_date: string | null;    // estimated date to exit (YYYY-MM-DD)
+  est_entry_price: number | null;  // estimated entry price
+  est_target_price: number | null; // estimated target price
+  est_hold_days: number | null;    // estimated holding period in days
+  est_reward_risk: number | null;  // estimated reward/risk ratio
 }
 
 export interface DashboardResponse {
