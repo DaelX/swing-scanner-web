@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Swing Scanner | Stock Market Scanner",
+  title: "DaelX Stocks Trading",
   description:
     "Scan the US stock market for short-term swing trade opportunities. Research/educational tool only — not financial advice.",
 };
@@ -31,7 +31,7 @@ export default function RootLayout({
         <nav className="border-b border-slate-800 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 text-lg font-bold">
             <span>⚡</span>
-            <span className="text-blue-400">Swing Scanner</span>
+            <span className="text-blue-400">DaelX Stocks Trading</span>
           </div>
           <div className="flex gap-4 text-sm text-slate-400">
             <a href="/dashboard" className="hover:text-white transition">
