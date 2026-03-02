@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import type { DashboardStock, DashboardResponse, Signal, StockKPIs } from "@/lib/dashboard-types";
 
+interface NewsItem { title: string; publisher: string; date: string; link: string; }
+
 type SortKey = keyof DashboardStock;
 type SortDir = "asc" | "desc";
 
@@ -97,6 +99,7 @@ export default function WatchlistPage() {
   const [filter, setFilter] = useState("all");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [kpiCache, setKpiCache] = useState<Record<string, StockKPIs | "loading" | "error">>({});
+  const [newsCache, setNewsCache] = useState<Record<string, NewsItem[] | "loading" | "error">>({});
 
   const fetchKPI = (symbol: string) => {
     if (kpiCache[symbol]) return;
@@ -105,6 +108,15 @@ export default function WatchlistPage() {
       .then((r) => r.json())
       .then((d) => setKpiCache((prev) => ({ ...prev, [symbol]: d })))
       .catch(() => setKpiCache((prev) => ({ ...prev, [symbol]: "error" })));
+  };
+
+  const fetchNews = (symbol: string) => {
+    if (newsCache[symbol]) return;
+    setNewsCache((prev) => ({ ...prev, [symbol]: "loading" }));
+    fetch(`/api/news/${symbol}`)
+      .then((r) => r.json())
+      .then((d) => setNewsCache((prev) => ({ ...prev, [symbol]: d.news || [] })))
+      .catch(() => setNewsCache((prev) => ({ ...prev, [symbol]: "error" })));
   };
 
   useEffect(() => {
@@ -222,7 +234,7 @@ export default function WatchlistPage() {
             <tbody>
               {filtered.map((s) => (
                 <>
-                  <tr key={s.symbol} className={`border-b border-slate-800 hover:bg-slate-800/50 cursor-pointer transition ${s.signal === "STRONG_BUY" ? "bg-green-950/20" : s.signal === "STRONG_SELL" ? "bg-red-950/20" : ""}`} onClick={() => { const next = expandedRow === s.symbol ? null : s.symbol; setExpandedRow(next); if (next) fetchKPI(next); }}>
+                  <tr key={s.symbol} className={`border-b border-slate-800 hover:bg-slate-800/50 cursor-pointer transition ${s.signal === "STRONG_BUY" ? "bg-green-950/20" : s.signal === "STRONG_SELL" ? "bg-red-950/20" : ""}`} onClick={() => { const next = expandedRow === s.symbol ? null : s.symbol; setExpandedRow(next); if (next) { fetchKPI(next); fetchNews(next); } }}>
                     <td className="px-2 py-2"><div className="flex flex-col gap-1"><SignalBadge signal={s.signal} /><ScoreBar score={s.signal_score} /></div></td>
                     <td className="px-2 py-2 font-bold text-white">{s.symbol}</td>
                     <td className="px-2 py-2 font-mono text-xs">${s.price.toFixed(2)}</td>
@@ -304,55 +316,93 @@ export default function WatchlistPage() {
                           );
                         })()}
 
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
-                          <div>
-                            <div className="text-slate-500 mb-1">Factor Breakdown</div>
-                            <div className="space-y-1.5">
-                              <FactorBar label="Trend" value={s.factor_trend} />
-                              <FactorBar label="Momen" value={s.factor_momentum} />
-                              <FactorBar label="MeanR" value={s.factor_mean_reversion} />
-                              <FactorBar label="Volume" value={s.factor_volume} />
-                              <FactorBar label="RS" value={s.factor_relative_strength} />
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-slate-500 mb-1">Key Levels</div>
-                            <div className="space-y-1">
-                              <div>SMA20: <span className="text-white font-mono">{s.sma20 ? `$${s.sma20.toFixed(2)}` : "—"}</span></div>
-                              <div>SMA50: <span className="text-white font-mono">{s.sma50 ? `$${s.sma50.toFixed(2)}` : "—"}</span></div>
-                              <div>SMA200: <span className="text-white font-mono">{s.sma200 ? `$${s.sma200.toFixed(2)}` : "—"}</span></div>
-                              <div>Support: <span className="text-white font-mono">{s.nearest_support ? `$${s.nearest_support.toFixed(2)} (${s.nearest_support_label})` : "—"}</span></div>
-                              <div>Resist: <span className="text-white font-mono">{s.nearest_resistance ? `$${s.nearest_resistance.toFixed(2)} (${s.nearest_resistance_label})` : "—"}</span></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-slate-500 mb-1">Risk Management</div>
-                            <div className="space-y-1">
-                              <div>Stop: <span className="text-red-400 font-mono">{s.stop_loss ? `$${s.stop_loss.toFixed(2)} (${s.stop_pct?.toFixed(1)}%)` : "—"}</span></div>
-                              <div>Target 1: <span className="text-green-400 font-mono">{s.target_1 ? `$${s.target_1.toFixed(2)}` : "—"}</span></div>
-                              <div>Target 2: <span className="text-green-400 font-mono">{s.target_2 ? `$${s.target_2.toFixed(2)}` : "—"}</span></div>
-                              <div>ATR: <span className="text-white font-mono">{s.atr ? `$${s.atr.toFixed(2)} (${s.atr_pct?.toFixed(1)}%)` : "—"}</span></div>
-                              <div>Size: <span className="text-white font-mono">{s.position_size_pct ? `${s.position_size_pct.toFixed(1)}% of portfolio` : "—"}</span></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-slate-500 mb-1">Signal Reasons</div>
-                            <div className="space-y-1">
-                              {s.signal_reasons.length > 0 ? s.signal_reasons.map((r, i) => (
-                                <div key={i} className={s.signal_score > 0 ? "text-green-400" : s.signal_score < 0 ? "text-red-400" : "text-slate-400"}>• {r}</div>
-                              )) : <div className="text-slate-600">No signals</div>}
-                            </div>
-                          </div>
-                          {s.est_entry_date && (
+                        <div className="flex gap-4">
+                          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                             <div>
-                              <div className="text-slate-500 mb-1">Trade Plan</div>
-                              <div className="space-y-1">
-                                <div>Entry: <span className="text-white font-mono">{s.est_entry_date}</span>{s.est_entry_price ? <span className="text-slate-400"> @ ${s.est_entry_price.toFixed(2)}</span> : ""}</div>
-                                <div>Exit: <span className="text-white font-mono">{s.est_exit_date}</span></div>
-                                <div>Hold: <span className="text-white font-mono">{s.est_hold_days ?? "—"} days</span></div>
+                              <div className="text-slate-500 mb-1">Factor Breakdown</div>
+                              <div className="space-y-1.5">
+                                <FactorBar label="Trend" value={s.factor_trend} />
+                                <FactorBar label="Momen" value={s.factor_momentum} />
+                                <FactorBar label="MeanR" value={s.factor_mean_reversion} />
+                                <FactorBar label="Volume" value={s.factor_volume} />
+                                <FactorBar label="RS" value={s.factor_relative_strength} />
                               </div>
                             </div>
-                          )}
+                            <div>
+                              <div className="text-slate-500 mb-1">Key Levels</div>
+                              <div className="space-y-1">
+                                <div>SMA20: <span className="text-white font-mono">{s.sma20 ? `$${s.sma20.toFixed(2)}` : "—"}</span></div>
+                                <div>SMA50: <span className="text-white font-mono">{s.sma50 ? `$${s.sma50.toFixed(2)}` : "—"}</span></div>
+                                <div>SMA200: <span className="text-white font-mono">{s.sma200 ? `$${s.sma200.toFixed(2)}` : "—"}</span></div>
+                                <div>Support: <span className="text-white font-mono">{s.nearest_support ? `$${s.nearest_support.toFixed(2)} (${s.nearest_support_label})` : "—"}</span></div>
+                                <div>Resist: <span className="text-white font-mono">{s.nearest_resistance ? `$${s.nearest_resistance.toFixed(2)} (${s.nearest_resistance_label})` : "—"}</span></div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-slate-500 mb-1">Risk Management</div>
+                              <div className="space-y-1">
+                                <div>Stop: <span className="text-red-400 font-mono">{s.stop_loss ? `$${s.stop_loss.toFixed(2)} (${s.stop_pct?.toFixed(1)}%)` : "—"}</span></div>
+                                <div>Target 1: <span className="text-green-400 font-mono">{s.target_1 ? `$${s.target_1.toFixed(2)}` : "—"}</span></div>
+                                <div>Target 2: <span className="text-green-400 font-mono">{s.target_2 ? `$${s.target_2.toFixed(2)}` : "—"}</span></div>
+                                <div>ATR: <span className="text-white font-mono">{s.atr ? `$${s.atr.toFixed(2)} (${s.atr_pct?.toFixed(1)}%)` : "—"}</span></div>
+                                <div>Size: <span className="text-white font-mono">{s.position_size_pct ? `${s.position_size_pct.toFixed(1)}% of portfolio` : "—"}</span></div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-slate-500 mb-1">Signal Reasons</div>
+                              <div className="space-y-1">
+                                {s.signal_reasons.length > 0 ? s.signal_reasons.map((r, i) => (
+                                  <div key={i} className={s.signal_score > 0 ? "text-green-400" : s.signal_score < 0 ? "text-red-400" : "text-slate-400"}>• {r}</div>
+                                )) : <div className="text-slate-600">No signals</div>}
+                              </div>
+                              {s.est_entry_date && (
+                                <div className="mt-2">
+                                  <div className="text-slate-500 mb-1">Trade Plan</div>
+                                  <div className="space-y-1">
+                                    <div>Entry: <span className="text-white font-mono">{s.est_entry_date}</span></div>
+                                    <div>R:R: <span className={`font-mono font-bold ${(s.reward_risk ?? 0) >= 2 ? "text-green-400" : "text-yellow-400"}`}>{s.reward_risk?.toFixed(1) ?? "—"}</span></div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Right: News sidebar */}
+                          <div className="w-64 flex-shrink-0 border-l border-slate-700 pl-4">
+                            <div className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-2">Latest News</div>
+                            {(() => {
+                              const news = newsCache[s.symbol];
+                              if (!news || news === "loading") return (
+                                <div className="text-[11px] text-slate-600 flex items-center gap-1">
+                                  <div className="animate-spin w-3 h-3 border border-slate-500 border-t-transparent rounded-full" />
+                                  Loading...
+                                </div>
+                              );
+                              if (news === "error") return <div className="text-[11px] text-red-400">Failed to load</div>;
+                              if (news.length === 0) return <div className="text-[11px] text-slate-600">No recent news</div>;
+                              return (
+                                <div className="space-y-2">
+                                  {news.slice(0, 5).map((n, i) => (
+                                    <a
+                                      key={i}
+                                      href={n.link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block group"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <div className="text-[11px] text-slate-300 group-hover:text-blue-400 transition leading-tight">
+                                        {n.title.length > 80 ? n.title.substring(0, 80) + "..." : n.title}
+                                      </div>
+                                      <div className="text-[9px] text-slate-600 mt-0.5">
+                                        {n.publisher} · {n.date}
+                                      </div>
+                                    </a>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </td>
                     </tr>
