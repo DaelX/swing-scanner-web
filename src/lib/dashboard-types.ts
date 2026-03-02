@@ -1,21 +1,28 @@
 /**
- * Dashboard types — shows ALL stocks with proximity to buy zones.
+ * DaelX Stocks Trading — Elite Strategy Types
+ *
+ * Multi-factor institutional signal system:
+ *   STRONG BUY / BUY / HOLD / SELL / STRONG SELL
+ *
+ * Built on trend regime + mean-reversion + momentum confluence.
  */
+
+export type Signal = "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL";
 
 export interface DashboardStock {
   symbol: string;
   price: number;
-  change_1d: number;    // % change from prev close
-  change_5d: number;    // % change over 5 days
+  change_1d: number;
+  change_5d: number;
 
   // Key levels
   sma20: number | null;
   sma50: number | null;
   sma200: number | null;
-  support_20d: number | null;   // 20-day low
-  resistance_20d: number | null; // 20-day high
+  support_20d: number | null;
+  resistance_20d: number | null;
 
-  // Distance to levels (% from current price, negative = below)
+  // Distance to levels (%)
   dist_sma20: number | null;
   dist_sma50: number | null;
   dist_sma200: number | null;
@@ -33,21 +40,43 @@ export interface DashboardStock {
   rs_20d: number | null;
   rs_60d: number | null;
 
-  // Buy zone analysis
-  buy_zone_score: number;         // 0-100: how ready this stock is
-  buy_zone_label: "IN_ZONE" | "APPROACHING" | "WATCH" | "NOT_READY";
-  buy_zone_reasons: string[];
-  nearest_support: number | null;  // closest key level below
-  nearest_support_label: string;
-  dist_to_buy: number | null;      // % to the buy zone
+  // ─── ELITE SIGNAL SYSTEM ───
 
-  // Trade timing estimates
-  est_entry_date: string | null;   // estimated date to enter (YYYY-MM-DD)
-  est_exit_date: string | null;    // estimated date to exit (YYYY-MM-DD)
-  est_entry_price: number | null;  // estimated entry price
-  est_target_price: number | null; // estimated target price
-  est_hold_days: number | null;    // estimated holding period in days
-  est_reward_risk: number | null;  // estimated reward/risk ratio
+  // Signal & conviction
+  signal: Signal;
+  signal_score: number;          // -100 (max bearish) to +100 (max bullish)
+  signal_reasons: string[];
+
+  // Trend regime (the macro filter)
+  trend: "BULL" | "BEAR" | "RANGE";
+  trend_reasons: string[];
+
+  // Factor scores (-100 to +100 each)
+  factor_trend: number;         // SMA alignment, slope, price position
+  factor_momentum: number;      // RSI, MACD, rate-of-change
+  factor_mean_reversion: number; // RSI extremes at support/resistance, Bollinger
+  factor_volume: number;        // Accumulation/distribution, vol profile
+  factor_relative_strength: number; // vs SPY, sector rotation signal
+
+  // Risk management
+  stop_loss: number | null;      // hard stop price
+  stop_pct: number | null;       // stop distance as % of entry
+  target_1: number | null;       // first target (1R)
+  target_2: number | null;       // second target (2R)
+  reward_risk: number | null;    // R:R ratio to target_1
+  position_size_pct: number | null; // suggested position size (% of portfolio) based on volatility
+
+  // Support / resistance
+  nearest_support: number | null;
+  nearest_support_label: string;
+  nearest_resistance: number | null;
+  nearest_resistance_label: string;
+
+  // Trade timing
+  est_entry_date: string | null;
+  est_exit_date: string | null;
+  est_entry_price: number | null;
+  est_hold_days: number | null;
 }
 
 export interface DashboardResponse {

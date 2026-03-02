@@ -2,8 +2,6 @@
  * Cache writer — fetches stock data from Yahoo Finance (runs locally where
  * Yahoo isn't blocked) and writes results to Turso DB.
  *
- * Populates BOTH the dashboard cache and the scanner cache.
- *
  * Usage:
  *   npx tsx scripts/populate-cache.ts [universe]
  *
@@ -25,9 +23,7 @@ if (!TURSO_URL || !TURSO_TOKEN) {
 
 const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
 
-// ─── Dashboard Cache Writer ───
-
-async function writeDashboardBatch(universe: string, scanDate: string, stocks: any[]) {
+async function writeBatch(universe: string, scanDate: string, stocks: any[]) {
   await db.execute({
     sql: "DELETE FROM dashboard_cache WHERE universe = ? AND scan_date = ?",
     args: [universe, scanDate],
@@ -45,25 +41,31 @@ async function writeDashboardBatch(universe: string, scanDate: string, stocks: a
         dist_sma20, dist_sma50, dist_sma200, dist_support,
         rsi, macd_hist, macd_signal_cross, vol_ratio, atr, atr_pct,
         rs_20d, rs_60d,
-        buy_zone_score, buy_zone_label, buy_zone_reasons,
-        nearest_support, nearest_support_label, dist_to_buy,
-        est_entry_date, est_exit_date, est_entry_price, est_target_price, est_hold_days, est_reward_risk
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        signal, signal_score, signal_reasons,
+        trend, trend_reasons,
+        factor_trend, factor_momentum, factor_mean_reversion, factor_volume, factor_relative_strength,
+        stop_loss, stop_pct, target_1, target_2, reward_risk, position_size_pct,
+        nearest_support, nearest_support_label, nearest_resistance, nearest_resistance_label,
+        est_entry_date, est_exit_date, est_entry_price, est_hold_days
+      ) VALUES (${new Array(47).fill("?").join(", ")})`,
       args: [
         s.symbol, universe, scanDate, s.price, s.change_1d, s.change_5d,
         s.sma20, s.sma50, s.sma200, s.support_20d, s.resistance_20d,
         s.dist_sma20, s.dist_sma50, s.dist_sma200, s.dist_support,
         s.rsi, s.macd_hist, s.macd_signal_cross, s.vol_ratio, s.atr, s.atr_pct,
         s.rs_20d, s.rs_60d,
-        s.buy_zone_score, s.buy_zone_label, JSON.stringify(s.buy_zone_reasons),
-        s.nearest_support, s.nearest_support_label, s.dist_to_buy,
-        s.est_entry_date, s.est_exit_date, s.est_entry_price, s.est_target_price, s.est_hold_days, s.est_reward_risk,
+        s.signal, s.signal_score, JSON.stringify(s.signal_reasons),
+        s.trend, JSON.stringify(s.trend_reasons),
+        s.factor_trend, s.factor_momentum, s.factor_mean_reversion, s.factor_volume, s.factor_relative_strength,
+        s.stop_loss, s.stop_pct, s.target_1, s.target_2, s.reward_risk, s.position_size_pct,
+        s.nearest_support, s.nearest_support_label, s.nearest_resistance, s.nearest_resistance_label,
+        s.est_entry_date, s.est_exit_date, s.est_entry_price, s.est_hold_days,
       ],
     }));
 
     await db.batch(stmts);
     written += batch.length;
-    process.stdout.write(`\r    Dashboard: ${written}/${stocks.length} stocks...`);
+    process.stdout.write(`\r    ${written}/${stocks.length} stocks...`);
   }
 
   await db.execute({
@@ -74,13 +76,11 @@ async function writeDashboardBatch(universe: string, scanDate: string, stocks: a
   return written;
 }
 
-// ─── Main ───
-
 async function main() {
   const universes = process.argv[2] ? [process.argv[2]] : ["sp500", "nasdaq100", "watchlist"];
   const scanDate = new Date().toISOString().slice(0, 10);
 
-  console.log(`\n🔄 Cache Writer — ${scanDate}`);
+  console.log(`\n⚡ DaelX Elite Strategy — Cache Writer — ${scanDate}`);
   console.log(`Universes: ${universes.join(", ")}\n`);
 
   for (const universe of universes) {
@@ -88,15 +88,19 @@ async function main() {
     const startTime = Date.now();
 
     try {
-      // 1. Dashboard scan (buy zone)
-      console.log(`  [Dashboard] Running buy-zone scan...`);
       const { stocks, totalScanned } = await runDashboardScan(universe);
-      const elapsed1 = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`\n  [Dashboard] Scanned ${totalScanned} tickers in ${elapsed1}s → ${stocks.length} results`);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+      const buys = stocks.filter(s => s.signal === "STRONG_BUY" || s.signal === "BUY").length;
+      const sells = stocks.filter(s => s.signal === "STRONG_SELL" || s.signal === "SELL").length;
+      const holds = stocks.filter(s => s.signal === "HOLD").length;
+
+      console.log(`\n  Scanned ${totalScanned} tickers in ${elapsed}s → ${stocks.length} results`);
+      console.log(`  Signals: ${buys} BUY | ${holds} HOLD | ${sells} SELL`);
 
       if (stocks.length > 0) {
-        const written = await writeDashboardBatch(universe, scanDate, stocks);
-        console.log(`\n    ✅ Dashboard: ${written} stocks cached`);
+        const written = await writeBatch(universe, scanDate, stocks);
+        console.log(`\n  ✅ ${written} stocks cached`);
       }
     } catch (err) {
       console.error(`  ❌ Error scanning ${universe}:`, err instanceof Error ? err.message : err);
