@@ -123,6 +123,7 @@ export default function DashboardPage() {
   const [calendarData, setCalendarData] = useState<MiniCalendarData | null>(null);
   const [kpiCache, setKpiCache] = useState<Record<string, StockKPIs | "loading" | "error">>({});
   const [newsCache, setNewsCache] = useState<Record<string, NewsItem[] | "loading" | "error">>({});
+  const [capitalMap, setCapitalMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch("/api/calendar?days=14&earnings=true")
@@ -182,6 +183,24 @@ export default function DashboardPage() {
     });
   }, [stocks, filter, sortKey, sortDir]);
 
+  // ROI simulation totals
+  const simulation = useMemo(() => {
+    let totalCapital = 0;
+    let totalReturn = 0;
+    const entries: { symbol: string; capital: number; roi: number; dollarReturn: number }[] = [];
+    for (const s of filtered) {
+      const cap = capitalMap[s.symbol];
+      if (!cap || cap <= 0 || !s.target_1 || s.price <= 0) continue;
+      const roi = ((s.target_1 - s.price) / s.price) * 100;
+      const dollarReturn = cap * (s.target_1 / s.price - 1);
+      totalCapital += cap;
+      totalReturn += dollarReturn;
+      entries.push({ symbol: s.symbol, capital: cap, roi, dollarReturn });
+    }
+    const totalRoiPct = totalCapital > 0 ? (totalReturn / totalCapital) * 100 : 0;
+    return { totalCapital, totalReturn, totalRoiPct, entries, hasData: entries.length > 0 };
+  }, [filtered, capitalMap]);
+
   const counts = useMemo(() => ({
     STRONG_BUY: stocks.filter((s) => s.signal === "STRONG_BUY").length,
     BUY: stocks.filter((s) => s.signal === "BUY").length,
@@ -223,6 +242,36 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Portfolio Simulation Summary ── */}
+      {simulation.hasData && (
+        <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Portfolio Simulation</span>
+              <span className="text-[10px] text-slate-500">({simulation.entries.length} positions)</span>
+            </div>
+            <div className="flex gap-6">
+              <div className="text-right">
+                <div className="text-[10px] text-slate-500 uppercase">Total Capital</div>
+                <div className="text-lg font-bold font-mono text-white">${simulation.totalCapital.toLocaleString()}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-slate-500 uppercase">Projected Return</div>
+                <div className={`text-lg font-bold font-mono ${simulation.totalReturn >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {simulation.totalReturn >= 0 ? "+" : ""}${simulation.totalReturn.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-slate-500 uppercase">Total ROI</div>
+                <div className={`text-lg font-bold font-mono ${simulation.totalRoiPct >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {simulation.totalRoiPct >= 0 ? "+" : ""}{simulation.totalRoiPct.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 mb-4 text-sm text-red-300">{error}</div>}
 
@@ -316,6 +365,9 @@ export default function DashboardPage() {
                 <SortHeader k="target_1">Target</SortHeader>
                 <SortHeader k="reward_risk">R:R</SortHeader>
                 <SortHeader k="position_size_pct">Size%</SortHeader>
+                <th className="px-2 py-2 text-left text-[10px] uppercase tracking-wider text-slate-400">ROI</th>
+                <th className="px-2 py-2 text-left text-[10px] uppercase tracking-wider text-slate-400">Capital</th>
+                <th className="px-2 py-2 text-left text-[10px] uppercase tracking-wider text-slate-400">Sim. Return</th>
               </tr>
             </thead>
             <tbody>
@@ -356,10 +408,43 @@ export default function DashboardPage() {
                         <span className="font-mono text-xs text-slate-300">{s.position_size_pct.toFixed(0)}%</span>
                       ) : <span className="text-slate-600">—</span>}
                     </td>
+                    <td className="px-2 py-2">
+                      {s.target_1 && s.price > 0 ? (
+                        <span className={`font-mono text-xs font-bold ${((s.target_1 - s.price) / s.price) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {(((s.target_1 - s.price) / s.price) * 100).toFixed(1)}%
+                        </span>
+                      ) : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        placeholder="$0"
+                        value={capitalMap[s.symbol] ? `$${capitalMap[s.symbol].toLocaleString()}` : ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9.]/g, "");
+                          const num = parseFloat(raw);
+                          setCapitalMap((prev) => ({ ...prev, [s.symbol]: isNaN(num) ? 0 : num }));
+                        }}
+                        className="w-20 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs font-mono text-white focus:border-blue-500 focus:outline-none"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      {(() => {
+                        const cap = capitalMap[s.symbol];
+                        if (!cap || cap <= 0 || !s.target_1 || s.price <= 0) return <span className="text-slate-600 text-xs">—</span>;
+                        const ret = cap * (s.target_1 / s.price - 1);
+                        return (
+                          <span className={`font-mono text-xs font-bold ${ret >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {ret >= 0 ? "+" : ""}${ret.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        );
+                      })()}
+                    </td>
                   </tr>
                   {expandedRow === s.symbol && (
                     <tr key={`${s.symbol}-detail`} className="bg-slate-900/60">
-                      <td colSpan={11} className="px-4 py-3">
+                      <td colSpan={14} className="px-4 py-3">
                         {/* ── KPI Row ── */}
                         {(() => {
                           const kpi = kpiCache[s.symbol];
