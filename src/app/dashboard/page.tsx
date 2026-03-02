@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { DashboardStock, DashboardResponse, Signal } from "@/lib/dashboard-types";
+
+/* ── Mini calendar types ── */
+interface MiniMacroEvent { date: string; time: string; type: string; name: string; impact: string; }
+interface MiniEarningsEvent { symbol: string; date: string; time: string; }
+interface MiniCalendarData { macro: MiniMacroEvent[]; earnings: MiniEarningsEvent[]; }
 
 type SortKey = keyof DashboardStock;
 type SortDir = "asc" | "desc";
@@ -112,6 +117,14 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filter, setFilter] = useState("all");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [calendarData, setCalendarData] = useState<MiniCalendarData | null>(null);
+
+  useEffect(() => {
+    fetch("/api/calendar?days=14&earnings=true")
+      .then((r) => r.json())
+      .then((d) => setCalendarData(d))
+      .catch(() => {});
+  }, []);
 
   const runScan = async () => {
     setLoading(true);
@@ -218,6 +231,38 @@ export default function DashboardPage() {
           <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-center cursor-pointer hover:border-red-500 transition" onClick={() => setFilter(filter === "STRONG_SELL" ? "all" : "STRONG_SELL")}>
             <div className="text-2xl font-bold text-red-400">{counts.STRONG_SELL}</div>
             <div className="text-[10px] text-red-500 uppercase tracking-wider">Strong Sell</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Upcoming Events Widget ── */}
+      {calendarData && (calendarData.macro.length > 0 || calendarData.earnings.length > 0) && (
+        <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upcoming Events (14d)</span>
+            <a href="/calendar" className="text-[10px] text-blue-400 hover:text-blue-300">View Full Calendar →</a>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {calendarData.macro.slice(0, 8).map((e, i) => {
+              const typeColors: Record<string, string> = { FOMC: "border-red-500 bg-red-900/20", CPI: "border-orange-500 bg-orange-900/20", NFP: "border-amber-500 bg-amber-900/20", GDP: "border-purple-500 bg-purple-900/20", PCE: "border-pink-500 bg-pink-900/20", PPI: "border-blue-500 bg-blue-900/20" };
+              const icons: Record<string, string> = { FOMC: "🏛️", CPI: "📊", NFP: "👷", GDP: "📈", PCE: "💳", PPI: "🏭", RETAIL_SALES: "🛒", ISM_MFG: "⚙️", ISM_SVC: "🏢" };
+              const d = new Date(e.date + "T12:00:00");
+              const dayStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              return (
+                <div key={`m${i}`} className={`flex-shrink-0 border rounded-lg px-3 py-2 min-w-[120px] ${typeColors[e.type] || "border-slate-600 bg-slate-800/30"}`}>
+                  <div className="text-[10px] text-slate-500">{dayStr}</div>
+                  <div className="text-xs font-bold mt-0.5">{icons[e.type] || "📅"} {e.type.replace(/_/g, " ")}</div>
+                  <div className="text-[10px] text-slate-400">{e.time} ET</div>
+                </div>
+              );
+            })}
+            {calendarData.earnings.length > 0 && (
+              <div className="flex-shrink-0 border border-violet-600 bg-violet-900/20 rounded-lg px-3 py-2 min-w-[140px]">
+                <div className="text-[10px] text-slate-500">Earnings</div>
+                <div className="text-xs font-bold mt-0.5">🎯 {calendarData.earnings.length} reports</div>
+                <div className="text-[10px] text-violet-400">{calendarData.earnings.slice(0, 4).map(e => e.symbol).join(", ")}{calendarData.earnings.length > 4 ? "..." : ""}</div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -40,6 +40,9 @@ export default function RootLayout({
             <a href="/watchlist" className="hover:text-white transition">
               Watchlist
             </a>
+            <a href="/calendar" className="hover:text-white transition">
+              Calendar
+            </a>
           </div>
         </nav>
         <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
